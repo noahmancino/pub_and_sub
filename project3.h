@@ -15,7 +15,7 @@
 #define URLSIZE 100
 #define CAPSIZE 200
 #define MAXNAME 25
-#define MAXPOSTS 5
+#define MAXPOSTS 100
 #define DELTA 100
 #define NUMPROXIES 10
 
@@ -58,9 +58,9 @@ struct threadPoolMember {
 
 // This is the entirety of the servers store.
 topicQueue topicStore[MAXTOPICS];
-pthread_t publisher_threads[NUMPROXIES/2];
-pthread_t subscriber_threads[NUMPROXIES/2];
-pthread_t cleaner;
+struct threadPoolMember publisher_pool[NUMPROXIES/2];
+struct threadPoolMember subscriber_pool[NUMPROXIES/2];
+struct threadPoolMember cleaner;
 
 
 // Retrieves queue named topicID from the registry of topics. Program terminates on failure.

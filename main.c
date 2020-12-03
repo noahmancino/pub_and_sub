@@ -162,7 +162,6 @@ int main() {
     for (int i = 0; i < 10; i++) {
         getEntry(&subArgs);
         viewPost(placeholder);
-
     }
     return 0;
 }
