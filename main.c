@@ -96,12 +96,48 @@ void dequeue(char *topicID) {
     }
     pthread_mutex_unlock(&topic->mutex);
 }
+
 /*
- * This routine will take two arguments: A) An integer argument lastEntry which is the number of the last entry read by
- * the calling thread on this topic, and B) A reference to an empty topicEntry struct. The routine will attempt to get
- * the lastEntry+1 entry if it is in the topic queue.
+ * This routine will take three arguments: A) An integer argument lastEntry which is the number of the last entry read
+ * by the calling thread on this topic, B) A reference to an empty topicEntry struct, and C) a topicID. The routine will
+ * attempt to get the lastEntry+1 entry if it is in the topic queue, or the oldest entry younger than lastEntry+1 if
+ * not.
 */
-void getEntry()
+int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
+    int newEntry = *lastEntry + 1;
+    topicQueue *topic = getQueue(topicID);
+    if (!topic->bufferEntries) {
+        return 0;
+    }
+    pthread_mutex_lock(&topic->mutex);
+    // If the next entry isn't in the queue, we need to know if there is a younger/later entry or not.
+    int was_dequed = 0;
+    for (int i = 0; i <= topic->bufferEntries; i++) {
+        struct topicEntry entry = topic->buffer[(topic->tail + i) % topic->totalCapacity];
+        if (entry.entryNum == newEntry) {
+            // Case where newEntry is in the queue
+            pthread_mutex_unlock(&topic->mutex);
+            memcpy(post, &entry, sizeof(entry));
+            *lastEntry = newEntry;
+            return 0;
+        }
+        if (entry.entryNum > newEntry) {
+            was_dequed = 1;
+            break;
+        }
+    }
+    if (was_dequed) {
+        // Case where newEntry is not in the queue but later/younger entries are.
+        struct topicEntry oldest = topic->buffer[topic->tail];
+        pthread_mutex_unlock(&topic->mutex);
+        memcpy(post, &oldest, sizeof(oldest));
+        *lastEntry = oldest.entryNum;
+        return 1;
+    }
+    // Case where neither newEntry or anything younger than newEntry has been placed in the queue.
+    pthread_mutex_unlock(&topic->mutex);
+    return 0;
+}
 
 
 int main() {
