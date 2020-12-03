@@ -58,10 +58,25 @@ void viewPost(struct topicEntry post) {
 }
 
 // Prints a topic queue.
-void viewQueue(char *topicID) {
-    topicQueue *topic = getQueue(topicID);
+void viewQueue(topicQueue *topic) {
     printf("name: %s, totalPastPosts: %d, head: %d, tail %d, totalCapcity %d, bufferEntries %d",
            topic->name, topic->totalPastPosts, topic->head, topic->tail, topic->totalCapacity, topic->bufferEntries);
+}
+
+topicQueue newTopicQueue(char *name) {
+    topicQueue new;
+    strcpy(new.name, name);
+    new.tail = 0, new.head = 0, new.totalPastPosts = 0;
+    pthread_mutex_init(&new.mutex, NULL);
+    new.totalCapacity = MAXPOSTS;
+    return new;
+}
+
+struct topicEntry newTopicEntry(char *URL, char *caption) {
+    struct topicEntry new;
+    strcpy(new.photoCaption, caption);
+    strcpy(new.photoURL, URL);
+    return new;
 }
 
 /*
@@ -80,7 +95,7 @@ void enqueue(char *topicID, struct topicEntry post) {
     }
     ++topic->totalPastPosts;
     gettimeofday(&post.timeStamp, NULL);
-    post.entryNum, post.pubID = topic->totalPastPosts, topic->totalPastPosts;
+    post.entryNum = topic->totalPastPosts, post.pubID = topic->totalPastPosts;
     topic->buffer[topic->head] = post;
     topic->head = (topic->head + 1) % topic->totalCapacity;
     ++topic->bufferEntries;
@@ -119,7 +134,6 @@ void dequeue(char *topicID) {
 */
 int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
     int newEntry = *lastEntry + 1;
-    viewQueue(topicID);
     topicQueue *topic = getQueue(topicID);
     if (!topic->bufferEntries) {
         return 0;
@@ -156,22 +170,18 @@ int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
 
 
 int main() {
-    printf("Hello, World!\n");
-    strcpy(topicStore[0].name, "apples");
-    topicStore[0].tail, topicStore[0].head, topicStore[0].totalPastPosts = 0, 0, 0;
-    pthread_mutex_init(&topicStore[0].mutex, NULL);
-    topicStore[0].totalCapacity = 5;
-
+    char *topics[MAXTOPICS] = {"fruit", "veggies", "mushrooms", "nuts"};
+    for (int i = 0; i < MAXTOPICS; i++) {
+        topicStore[i] = newTopicQueue(topics[i]);
+    }
     for (int i = 0; i < 5; i++) {
-        enqueue("apples", *(struct topicEntry*)malloc(sizeof(struct topicEntry)));
-        dequeue("apples");
-        sleep(1);
+        enqueue(topics[0], newTopicEntry("repeat", "cap"));
+        dequeue(topics[0]);
     }
     struct topicEntry placeholder;
     int a = 0;
     for (int i = 0; i < 10; i++) {
-        getEntry(&a, &placeholder, "apples");
-        printf("a! %d\n", a);
+        getEntry(&a, &placeholder, topics[0]);
         viewPost(placeholder);
     }
     return 0;
