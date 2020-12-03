@@ -6,13 +6,14 @@
 #include <sys/time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <zconf.h>
 
 #define MAXTOPICS 4
 #define URLSIZE 100
 #define CAPSIZE 200
 #define MAXNAME 25
-#define MAXPOSTS 1000
-#define DELTA 1000 // units of milliseconds.
+#define MAXPOSTS 5
+#define DELTA 1 // units of milliseconds.
 
 // These are individual posts, all posts consist of a photo and a caption.
 struct topicEntry {
@@ -51,6 +52,18 @@ topicQueue *getQueue(const char *topicID) {
     exit(EXIT_FAILURE);
 }
 
+// Prints a topic entry.
+void viewPost(struct topicEntry post) {
+    printf("entryNum: %d, photoURL %s, photoCaption %s\n", post.entryNum, post.photoURL, post.photoCaption);
+}
+
+// Prints a topic queue.
+void viewQueue(char *topicID) {
+    topicQueue *topic = getQueue(topicID);
+    printf("name: %s, totalPastPosts: %d, head: %d, tail %d, totalCapcity %d, bufferEntries %d",
+           topic->name, topic->totalPastPosts, topic->head, topic->tail, topic->totalCapacity, topic->bufferEntries);
+}
+
 /*
  * This function will attempt to enqueue the topic entry TE into the topic queue with name TopicID. Note that this
  * function contains a critical section and will block until the topic queue with name TopicID's mutex is unlocked.
@@ -58,15 +71,16 @@ topicQueue *getQueue(const char *topicID) {
 void enqueue(char *topicID, struct topicEntry post) {
     topicQueue *topic = getQueue(topicID);
     pthread_mutex_lock(&topic->mutex);
-    if (topic->totalCapacity == topic->bufferEntries) {
+    while (topic->totalCapacity == topic->bufferEntries) {
         // TODO: Change to a semaphore instead of looping.
+        printf("here!!!!\n");
         pthread_mutex_unlock(&topic->mutex);
         sched_yield();
         pthread_mutex_lock(&topic->mutex);
     }
     ++topic->totalPastPosts;
     gettimeofday(&post.timeStamp, NULL);
-    post.entryNum, post.pubID = topic->totalPastPosts;
+    post.entryNum, post.pubID = topic->totalPastPosts, topic->totalPastPosts;
     topic->buffer[topic->head] = post;
     topic->head = (topic->head + 1) % topic->totalCapacity;
     ++topic->bufferEntries;
@@ -105,6 +119,7 @@ void dequeue(char *topicID) {
 */
 int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
     int newEntry = *lastEntry + 1;
+    viewQueue(topicID);
     topicQueue *topic = getQueue(topicID);
     if (!topic->bufferEntries) {
         return 0;
@@ -123,7 +138,6 @@ int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
         }
         if (entry.entryNum > newEntry) {
             was_dequed = 1;
-            break;
         }
     }
     if (was_dequed) {
@@ -135,6 +149,7 @@ int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
         return 1;
     }
     // Case where neither newEntry or anything younger than newEntry has been placed in the queue.
+    printf("here!\n");
     pthread_mutex_unlock(&topic->mutex);
     return 0;
 }
@@ -142,5 +157,22 @@ int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
 
 int main() {
     printf("Hello, World!\n");
+    strcpy(topicStore[0].name, "apples");
+    topicStore[0].tail, topicStore[0].head, topicStore[0].totalPastPosts = 0, 0, 0;
+    pthread_mutex_init(&topicStore[0].mutex, NULL);
+    topicStore[0].totalCapacity = 5;
+
+    for (int i = 0; i < 5; i++) {
+        enqueue("apples", *(struct topicEntry*)malloc(sizeof(struct topicEntry)));
+        dequeue("apples");
+        sleep(1);
+    }
+    struct topicEntry placeholder;
+    int a = 0;
+    for (int i = 0; i < 10; i++) {
+        getEntry(&a, &placeholder, "apples");
+        printf("a! %d\n", a);
+        viewPost(placeholder);
+    }
     return 0;
 }
