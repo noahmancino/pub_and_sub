@@ -6,13 +6,12 @@
 #include <sys/time.h>
 #include <string.h>
 #include "project3.h"
-
+// TODO: stop using structs as arguments to enqueue and getEntry.
 /*
  * This function will attempt to enqueue the topic entry TE into the topic queue with name TopicID. Note that this
  * function contains a critical section and will block until the topic queue with name TopicID's mutex is unlocked.
 */
-void *enqueue(void *args) {
-    struct publisherArgs *pubArgs = (struct publisherArgs *)args;
+int enqueue(struct enqueueArgs *pubArgs) {
     char *topicID = pubArgs->topicID;
     struct topicEntry post = pubArgs->post;
     topicQueue *topic = getQueue(topicID);
@@ -32,6 +31,19 @@ void *enqueue(void *args) {
     pthread_mutex_unlock(&topic->mutex);
     return EXIT_SUCCESS;
 }
+
+
+/*
+ * This is the start routine for a publisher thread. It takes an array of arguments to enqueue and calls enqueue on them.
+ */
+void *publisher(void *args) {
+    struct publisherArg *pubArgs = (struct publisherArg *)args;
+    for (int i = 0; i < pubArgs->numArgs; i++) {
+        enqueue(&pubArgs->eArgs[i]);
+    }
+    return EXIT_SUCCESS;
+}
+
 
 /*
  * This function will attempt to dequeue a post from the topic queue named topicID if the oldest post is older than
@@ -58,6 +70,20 @@ void *dequeue(void *topicID) {
     return EXIT_SUCCESS;
 }
 
+/*
+ * The start routine for the cleaner thread. Attempts to dequeue from each topic each time DELTA milliseconds have
+ * elapsed.
+ */
+void *cleaner(void *arg) {
+    unsigned long int topics = (unsigned long int) arg;
+    while (1) {
+        for (int i = 0; i < topics; i++) {
+            dequeue(topicStore[i].name);
+        }
+        usleep(100);
+    }
+    return EXIT_SUCCESS;
+}
 
 /*
 int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
@@ -103,7 +129,7 @@ int getEntry(int *lastEntry, struct topicEntry *post, char *topicID) {
  * not.
 */
 void *getEntry(void *args) {
-    struct subscriberArgs *subArgs = (struct subscriberArgs*)args;
+    struct getEntryArgs *subArgs = (struct getEntryArgs*)args;
     int newEntry = *(subArgs->lastEntry) + 1;
     topicQueue *topic = getQueue(subArgs->topicID);
     if (!topic->bufferEntries) {
@@ -138,14 +164,27 @@ void *getEntry(void *args) {
     return (void *)EXIT_FAILURE;
 }
 
+
+/*
+ * Start routine for the subscriber thread. Takes an array of getEntry args and the length of the array, calls
+ * getEntry for each one, and displays the ticket it fills.
+ */
+void *subscriber(void *args) {
+    struct subscriberArg *entryArgs = (struct subscriberArg *)args;
+    int lastEntry = 0;
+    for (int i = 0; i < entryArgs->numArgs; i++) {
+        entryArgs->geArgs[i].lastEntry = &lastEntry;
+        getEntry(&entryArgs->geArgs[i]);
+        viewPost(*entryArgs->geArgs[i].post);
+    }
+}
+
 int main() {
     char *topics[MAXTOPICS] = {"fruit", "veggies", "mushrooms", "nuts"};
     for (int i = 0; i < MAXTOPICS; i++) {
         topicStore[i] = newTopicQueue(topics[i]);
     }
-    pthread_t publisher_thread;
-    pthread_t clean;
-    struct publisherArgs pubArgs;
+    struct enqueueArgs pubArgs;
     for (int i = 0; i < 5; i++) {
         pubArgs.topicID = topics[0];
         pubArgs.post = newTopicEntry("repeat", "cap");
@@ -157,7 +196,7 @@ int main() {
     printf("hello");
     struct topicEntry placeholder;
     int a = 0;
-    struct subscriberArgs subArgs = {.lastEntry = &a, .topicID = topics[0], .post = &placeholder};
+    struct getEntryArgs subArgs = {.lastEntry = &a, .topicID = topics[0], .post = &placeholder};
 
     for (int i = 0; i < 10; i++) {
         getEntry(&subArgs);

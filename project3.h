@@ -40,15 +40,25 @@ typedef struct topicQueue {
     int bufferEntries;
 } topicQueue;
 
-struct publisherArgs {
+struct enqueueArgs {
     char *topicID;
     struct topicEntry post;
 };
 
-struct subscriberArgs {
+struct getEntryArgs {
     char *topicID;
     struct topicEntry *post;
     int *lastEntry;
+};
+
+struct publisherArg {
+    struct enqueueArgs *eArgs;
+    unsigned int numArgs;
+};
+
+struct subscriberArg {
+    struct getEntryArgs *geArgs;
+    unsigned int numArgs;
 };
 
 struct threadPoolMember {
@@ -60,7 +70,7 @@ struct threadPoolMember {
 topicQueue topicStore[MAXTOPICS];
 struct threadPoolMember publisher_pool[NUMPROXIES/2];
 struct threadPoolMember subscriber_pool[NUMPROXIES/2];
-struct threadPoolMember cleaner;
+struct threadPoolMember clean;
 
 
 // Retrieves queue named topicID from the registry of topics. Program terminates on failure.
