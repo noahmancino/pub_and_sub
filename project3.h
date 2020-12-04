@@ -18,6 +18,9 @@
 #define MAXPOSTS 100
 #define DELTA 100
 #define NUMPROXIES 10
+#define MAXTOKENS 10
+#define MAXCOMMANDS 100
+#define MAXTOKEN 100
 
 // These are individual posts, all posts consist of a photo and a caption.
 struct topicEntry {
@@ -109,6 +112,47 @@ struct topicEntry newTopicEntry(char *URL, char *caption) {
     strcpy(new.photoCaption, caption);
     strcpy(new.photoURL, URL);
     return new;
+}
+
+/*
+ * Given the name of a text file this function returns an array of arrays of tokens in the files' text. The outer
+ * arrays are delimited by newlines, the inner arrays are delimited by whitespace.
+ */
+char ***tokenize(const char *filename) {
+    char ***parsedLines = (char ***)malloc(sizeof(char **) * MAXCOMMANDS);
+    FILE *commandFile = fopen(filename, "r");
+    char *line = NULL;
+    size_t n = 0;
+    int i;
+    for (i = 0; getline(&line, &n, commandFile) != -1; i++) {
+        parsedLines[i] = (char **)malloc(sizeof(char *) * MAXTOKENS);
+        char *token = strtok(line, " \n");
+        int j;
+        for (j = 0; token != NULL; j++) {
+            parsedLines[i][j] = (char *)malloc(sizeof(char) * MAXTOKEN);
+            strcpy(parsedLines[i][j], token);
+            token = strtok(NULL, " \n");
+        }
+        parsedLines[i][j] = NULL;
+
+    }
+    free(line);
+    fclose(commandFile);
+    parsedLines[i] = NULL;
+    return parsedLines;
+}
+
+/*
+ * Frees a 3-d array where the array is mallocd at each level.
+ */
+void freeTokens(char ***tokenized) {
+    for (int i = 0; tokenized[i] != NULL; i++) {
+        for (int j = 0; tokenized[i][j] != NULL; j++) {
+            free(tokenized[i][j]);
+        }
+        free(tokenized[i]);
+    }
+    free(tokenized);
 }
 
 

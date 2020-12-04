@@ -6,7 +6,7 @@
 #include <sys/time.h>
 #include <string.h>
 #include "project3.h"
-// TODO: stop using structs as arguments to enqueue and getEntry.
+// TODO: stop using structs as arguments to enqueue and getEntry. They are no longer start routines for pthreads.
 /*
  * This function will attempt to enqueue the topic entry TE into the topic queue with name TopicID. Note that this
  * function contains a critical section and will block until the topic queue with name TopicID's mutex is unlocked.
@@ -17,7 +17,7 @@ int enqueue(struct enqueueArgs *pubArgs) {
     topicQueue *topic = getQueue(topicID);
     pthread_mutex_lock(&topic->mutex);
     while (topic->totalCapacity == topic->bufferEntries) {
-        // TODO: Change to a semaphore instead of looping.
+        // TODO: Change to a semaphore instead of doing this the lazy way.
         pthread_mutex_unlock(&topic->mutex);
         sched_yield();
         pthread_mutex_lock(&topic->mutex);
@@ -133,6 +133,7 @@ void *getEntry(void *args) {
     int newEntry = *(subArgs->lastEntry) + 1;
     topicQueue *topic = getQueue(subArgs->topicID);
     if (!topic->bufferEntries) {
+        printf("a different kind of failure\n");
         return (void *)EXIT_FAILURE;
     }
     pthread_mutex_lock(&topic->mutex);
@@ -145,7 +146,7 @@ void *getEntry(void *args) {
             pthread_mutex_unlock(&topic->mutex);
             memcpy(subArgs->post, &entry, sizeof(entry));
             *subArgs->lastEntry = newEntry;
-            return (void *)EXIT_SUCCESS;
+            return EXIT_SUCCESS;
         }
         if (entry.entryNum > newEntry) {
             was_dequed = 1;
@@ -161,6 +162,8 @@ void *getEntry(void *args) {
     }
     // Case where neither newEntry or anything younger than newEntry has been placed in the queue.
     pthread_mutex_unlock(&topic->mutex);
+    printf("failure ):\n");
+    fflush(stdout);
     return (void *)EXIT_FAILURE;
 }
 
@@ -174,33 +177,40 @@ void *subscriber(void *args) {
     int lastEntry = 0;
     for (int i = 0; i < entryArgs->numArgs; i++) {
         entryArgs->geArgs[i].lastEntry = &lastEntry;
-        getEntry(&entryArgs->geArgs[i]);
-        viewPost(*entryArgs->geArgs[i].post);
+        if (!getEntry(&entryArgs->geArgs[i])) {
+            printf("not else\n");
+            viewPost(*entryArgs->geArgs[i].post);
+        }
+        else {
+            printf("else\n");
+        }
     }
 }
 
-int main() {
-    char *topics[MAXTOPICS] = {"fruit", "veggies", "mushrooms", "nuts"};
-    for (int i = 0; i < MAXTOPICS; i++) {
-        topicStore[i] = newTopicQueue(topics[i]);
-    }
-    struct enqueueArgs pubArgs;
-    for (int i = 0; i < 5; i++) {
-        pubArgs.topicID = topics[0];
-        pubArgs.post = newTopicEntry("repeat", "cap");
-        pthread_create(&publisher_thread, NULL, enqueue, &pubArgs);
-        pthread_create(&clean, NULL, dequeue, topics[0]);
-        pthread_join(publisher_thread, NULL);
-        pthread_join(clean, NULL);
-    }
-    printf("hello");
-    struct topicEntry placeholder;
-    int a = 0;
-    struct getEntryArgs subArgs = {.lastEntry = &a, .topicID = topics[0], .post = &placeholder};
+int main(int argc, char *argv[]) {
+    char *masterCommandFile = argv[1];
+    char ***tokenizedMaster = tokenize(masterCommandFile);
+    for (int i = 0; tokenizedMaster[i] != NULL; i++) {
+        // Create a topic with ID (integer) and length. This allocates a topic queue.
+        if (!strcmp(tokenizedMaster[i][0], "create")) {
 
-    for (int i = 0; i < 10; i++) {
-        getEntry(&subArgs);
-        viewPost(placeholder);
+        }
+        // Start all of the publishers and subscribers, as well as the cleanup thread.
+        else if (!strcmp(tokenizedMaster[i][0], "start")) {
+
+        }
+        // Set delta (determines how long until posts get cleaned from store) to specified value.
+        else if (!strcmp(tokenizedMaster[i][0], "delta")) {
+
+        }
+        // Adds a job to the publisher threads workload. A free thread is allocated to be the “proxy" for the publisher
+        else if (!strcmp(tokenizedMaster[i][1], "publisher")) {
+
+        }
+        // Adds a job to the subscriber threads workload A free thread is allocated to be the “proxy" for the subscriber
+        else if (!strcmp(tokenizedMaster[i][1], "subscriber")) {
+
+        }
     }
     return 0;
 }
