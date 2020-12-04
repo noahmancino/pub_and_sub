@@ -7,7 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <zconf.h>
-
+#include <signal.h>
 
 #ifndef PROJECT3_PROJECT3_H
 #define PROJECT3_PROJECT3_H
@@ -16,7 +16,6 @@
 #define CAPSIZE 200
 #define MAXNAME 25
 #define MAXPOSTS 100
-#define DELTA 100
 #define NUMPROXIES 10
 #define MAXTOKENS 10
 #define MAXCOMMANDS 100
@@ -35,7 +34,8 @@ struct topicEntry {
 typedef struct topicQueue {
     char name[MAXNAME];
     pthread_mutex_t mutex;
-    struct topicEntry buffer[MAXPOSTS];
+    struct topicEntry *buffer;
+    int id;
     int totalPastPosts; // This is an easy way to give each post in the topic a unique ID.
     int head;
     int tail;
@@ -54,27 +54,32 @@ struct getEntryArgs {
     int *lastEntry;
 };
 
-struct publisherArg {
-    struct enqueueArgs *eArgs;
-    unsigned int numArgs;
-};
-
-struct subscriberArg {
-    struct getEntryArgs *geArgs;
-    unsigned int numArgs;
-};
-
 struct threadPoolMember {
-    short i; // Flag indicating whether a thread is free.
+    short isNotFree;
     pthread_t thread;
 };
 
 // This is the entirety of the servers store.
 topicQueue topicStore[MAXTOPICS];
-struct threadPoolMember publisher_pool[NUMPROXIES/2];
-struct threadPoolMember subscriber_pool[NUMPROXIES/2];
+struct threadPoolMember publisherPool[NUMPROXIES / 2];
+struct threadPoolMember subscriberPool[NUMPROXIES / 2];
 struct threadPoolMember clean;
+int delta = 1;
 
+
+/*
+ * Checks thread pool array (note that it assumes it is of length NUMPROXIES / 2) for free threads. If one exists, it
+ * returns a pointer to it and marks the thread unavailable. Otherwise, it returns the null pointer.
+ */
+pthread_t *getFreeThread(struct threadPoolMember *threadPool) {
+    for (int i = 0; i < NUMPROXIES / 2; i++) {
+        if (!threadPool[i].isNotFree) {
+            threadPool[i].isNotFree = 1;
+            return &threadPool[i].thread;
+        }
+    }
+    return NULL;
+}
 
 // Retrieves queue named topicID from the registry of topics. Program terminates on failure.
 topicQueue *getQueue(const char *topicID) {
@@ -98,12 +103,13 @@ void viewQueue(topicQueue *topic) {
            topic->name, topic->totalPastPosts, topic->head, topic->tail, topic->totalCapacity, topic->bufferEntries);
 }
 
-topicQueue newTopicQueue(char *name) {
+topicQueue newTopicQueue(char *name, int topicID, int bufferSize) {
     topicQueue new;
+    new.buffer = (struct topicEntry *)malloc(sizeof(struct topicEntry) * bufferSize);
     strcpy(new.name, name);
-    new.tail = 0, new.head = 0, new.totalPastPosts = 0, new.bufferEntries = 0;
+    new.tail = 0, new.head = 0, new.totalPastPosts = 0, new.bufferEntries = 0, new.id = topicID;
     pthread_mutex_init(&new.mutex, NULL);
-    new.totalCapacity = MAXPOSTS;
+    new.totalCapacity = bufferSize;
     return new;
 }
 

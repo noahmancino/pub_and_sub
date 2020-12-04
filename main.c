@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <string.h>
+#include <bits/sigthread.h>
 #include "project3.h"
 // TODO: stop using structs as arguments to enqueue and getEntry. They are no longer start routines for pthreads.
 /*
@@ -47,7 +48,7 @@ void *publisher(void *args) {
 
 /*
  * This function will attempt to dequeue a post from the topic queue named topicID if the oldest post is older than
- * DELTA. Note that this function contains a critical section and will block until the topic queue with name topicID's
+ * delta. Note that this function contains a critical section and will block until the topic queue with name topicID's
  * mutex is unlocked.
 */
 void *dequeue(void *topicID) {
@@ -58,11 +59,10 @@ void *dequeue(void *topicID) {
         return (void *) EXIT_FAILURE;
     }
     struct topicEntry dequeued = topic->buffer[topic->tail];
-    struct timeval delta;
-    gettimeofday(&delta, NULL);
-    delta.tv_sec -= dequeued.timeStamp.tv_sec;
-    delta.tv_usec -= dequeued.timeStamp.tv_usec;
-    if (delta.tv_sec || delta.tv_usec > DELTA) {
+    struct timeval curDelta;
+    gettimeofday(&curDelta, NULL);
+    curDelta.tv_sec -= dequeued.timeStamp.tv_sec;
+    if (curDelta.tv_sec > delta) {
         topic->tail = (topic->tail + 1) % topic->totalCapacity;
         --topic->bufferEntries;
     }
@@ -71,7 +71,7 @@ void *dequeue(void *topicID) {
 }
 
 /*
- * The start routine for the cleaner thread. Attempts to dequeue from each topic each time DELTA milliseconds have
+ * The start routine for the cleaner thread. Attempts to dequeue from each topic each time delta milliseconds have
  * elapsed.
  */
 void *cleaner(void *arg) {
@@ -162,7 +162,6 @@ void *getEntry(void *args) {
     }
     // Case where neither newEntry or anything younger than newEntry has been placed in the queue.
     pthread_mutex_unlock(&topic->mutex);
-    printf("failure ):\n");
     fflush(stdout);
     return (void *)EXIT_FAILURE;
 }
@@ -190,27 +189,66 @@ void *subscriber(void *args) {
 int main(int argc, char *argv[]) {
     char *masterCommandFile = argv[1];
     char ***tokenizedMaster = tokenize(masterCommandFile);
+    unsigned long stores = 0;
     for (int i = 0; tokenizedMaster[i] != NULL; i++) {
         // Create a topic with ID (integer) and length. This allocates a topic queue.
         if (!strcmp(tokenizedMaster[i][0], "create")) {
-
+            int topicID = atoi(tokenizedMaster[i][2]);
+            char *name = tokenizedMaster[i][3];
+           // The name is encased in quotes.
+            name += 1;
+            name[strlen(name) - 1] = '\0';
+            int bufferSize = atoi(tokenizedMaster[i][4]);
+            topicStore[stores] = newTopicQueue(name, topicID, bufferSize);
+            ++stores;
+            // TODO: free topic buffers
+            // TODO: make sure things don't break because the buffer is mallocd.
         }
         // Start all of the publishers and subscribers, as well as the cleanup thread.
         else if (!strcmp(tokenizedMaster[i][0], "start")) {
-
+            pthread_create(&clean.thread, NULL, cleaner, (void *)stores);
+            for (int k = 0; k < NUMPROXIES/2; k++) {
+                if (publisherPool[k].isNotFree) {
+                    pthread_kill(publisherPool[k].thread, SIGCONT);
+                }
+                if (subscriberPool[k].isNotFree) {
+                    pthread_kill(subscriberPool[k].thread, SIGCONT);
+                }
+            }
         }
         // Set delta (determines how long until posts get cleaned from store) to specified value.
         else if (!strcmp(tokenizedMaster[i][0], "delta")) {
-
+            delta = atoi(tokenizedMaster[i][1]);
         }
-        // Adds a job to the publisher threads workload. A free thread is allocated to be the “proxy" for the publisher
+        /* Adds a job to the publisher threads workload. A free thread is allocated to be the “proxy" for the
+         * publisher
+         */
         else if (!strcmp(tokenizedMaster[i][1], "publisher")) {
-
+            char *filename = tokenizedMaster[i][2];
+            // Input has quotes around it
+            filename++;
+            filename[strlen(filename)-1] = '\0';
+            pthread_t *freeThread = getFreeThread(publisherPool);
+            if(freeThread != NULL) {
+                pthread_create(freeThread, NULL, publisher, filename);
+            }
+            // TODO: deal with no available threads.
         }
-        // Adds a job to the subscriber threads workload A free thread is allocated to be the “proxy" for the subscriber
+        /* Adds a job to the subscriber threads workload A free thread is allocated to be the “proxy" for the
+         * subscriber
+         */
         else if (!strcmp(tokenizedMaster[i][1], "subscriber")) {
-
+            char *filename = tokenizedMaster[i][2];
+            // Input has quotes around it
+            filename++;
+            filename[strlen(filename)-1] = '\0';
+            pthread_t *freeThread = getFreeThread(subscriberPool);
+            if(freeThread != NULL) {
+                pthread_create(freeThread, NULL, subscriber, filename);
+            }
         }
     }
+    freeTokens(tokenizedMaster);
+    viewQueue(&topicStore[0]);
     return 0;
 }
