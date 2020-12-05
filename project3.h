@@ -12,14 +12,14 @@
 #ifndef PROJECT3_PROJECT3_H
 #define PROJECT3_PROJECT3_H
 #define MAXTOPICS 4
-#define URLSIZE 100
+#define URLSIZE 150
 #define CAPSIZE 200
 #define MAXNAME 25
 #define MAXPOSTS 100
 #define NUMPROXIES 10
-#define MAXTOKENS 10
-#define MAXCOMMANDS 100
-#define MAXTOKEN 100
+#define MAXTOKENS 15
+#define MAXCOMMANDS 50
+#define MAXTOKEN 200
 
 // These are individual posts, all posts consist of a photo and a caption.
 struct topicEntry {
@@ -43,17 +43,6 @@ typedef struct topicQueue {
     int bufferEntries;
 } topicQueue;
 
-struct enqueueArgs {
-    char *topicID;
-    struct topicEntry post;
-};
-
-struct getEntryArgs {
-    char *topicID;
-    struct topicEntry *post;
-    int *lastEntry;
-};
-
 struct threadPoolMember {
     short isNotFree;
     pthread_t thread;
@@ -65,44 +54,42 @@ struct threadPoolMember publisherPool[NUMPROXIES / 2];
 struct threadPoolMember subscriberPool[NUMPROXIES / 2];
 struct threadPoolMember clean;
 int delta = 1;
+int stores;
 
+static void catch(int signal) { }
 
-/*
- * Checks thread pool array (note that it assumes it is of length NUMPROXIES / 2) for free threads. If one exists, it
- * returns a pointer to it and marks the thread unavailable. Otherwise, it returns the null pointer.
- */
-pthread_t *getFreeThread(struct threadPoolMember *threadPool) {
-    for (int i = 0; i < NUMPROXIES / 2; i++) {
-        if (!threadPool[i].isNotFree) {
-            threadPool[i].isNotFree = 1;
-            return &threadPool[i].thread;
-        }
-    }
-    return NULL;
+static void iLikeFruit(int signal) {
+    printf("it was me!!! %lu\n\n\n\n\n\n\n\n\n\n\n\n", pthread_self());
+    pthread_exit(NULL);
+}
+
+static void pudding(int signal) {
+    pthread_exit(NULL);
 }
 
 // Retrieves queue named topicID from the registry of topics. Program terminates on failure.
-topicQueue *getQueue(const char *topicID) {
-    for (int i = 0; i < MAXTOPICS; i++) {
-        if (!strcmp(topicID, topicStore[i].name)) {
+topicQueue *getQueue(int topicID) {
+    for (int i = 0; i < stores; i++) {
+        if (topicStore[i].id == topicID) {
             return &topicStore[i];
         }
     }
-    fprintf(stderr, "Attempt to access topicQueue that does not exist :%s:\n", topicID);
+    fprintf(stderr, "Attempt to access topicQueue that does not exist :%d:\n", topicID);
     exit(EXIT_FAILURE);
 }
 
 // Prints a topic entry.
-void viewPost(struct topicEntry post) {
-    printf("entryNum: %d, photoURL %s, photoCaption %s\n", post.entryNum, post.photoURL, post.photoCaption);
+void viewPost(FILE *file, struct topicEntry post) {
+    fprintf(file, "entryNum: %d, photoURL %s, photoCaption %s\n", post.entryNum, post.photoURL, post.photoCaption);
 }
 
 // Prints a topic queue.
 void viewQueue(topicQueue *topic) {
-    printf("name: %s, totalPastPosts: %d, head: %d, tail %d, totalCapcity %d, bufferEntries %d",
-           topic->name, topic->totalPastPosts, topic->head, topic->tail, topic->totalCapacity, topic->bufferEntries);
+    printf("name: %s, totalPastPosts: %d, totalCapcity %d, bufferEntries %d pid: %d\n",
+           topic->name, topic->totalPastPosts, topic->totalCapacity, topic->bufferEntries, topic->id);
 }
 
+// init for topic queues
 topicQueue newTopicQueue(char *name, int topicID, int bufferSize) {
     topicQueue new;
     new.buffer = (struct topicEntry *)malloc(sizeof(struct topicEntry) * bufferSize);
@@ -113,11 +100,20 @@ topicQueue newTopicQueue(char *name, int topicID, int bufferSize) {
     return new;
 }
 
+// Init for topic entries
 struct topicEntry newTopicEntry(char *URL, char *caption) {
     struct topicEntry new;
     strcpy(new.photoCaption, caption);
     strcpy(new.photoURL, URL);
     return new;
+}
+
+// Given a string encased in quotes, returns the string with the quotes removed.
+char *removeQuotes(char *string) {
+    ++string;
+    fflush(stdout);
+    if (strlen(string)) string[strlen(string)-1] = '\0';
+    return string;
 }
 
 /*
@@ -140,7 +136,6 @@ char ***tokenize(const char *filename) {
             token = strtok(NULL, " \n");
         }
         parsedLines[i][j] = NULL;
-
     }
     free(line);
     fclose(commandFile);
@@ -161,5 +156,84 @@ void freeTokens(char ***tokenized) {
     free(tokenized);
 }
 
+void readToks(char ***toks) {
+    for (int i = 0; toks[i] != NULL; i++) {
+        for (int j = 0; toks[i][j] != NULL; j++) {
+            printf("%s ", toks[i][j]);
+        }
+        printf("\n");
+    }
+    fflush(stdout);
+    printf("\n");
+}
+
+int count_token (char* buf, const char* delim) {
+    if (buf == NULL) {
+        printf ("Empty string\n");
+        return -1;
+    }
+    int len = strlen (buf);
+    int n_token = 0;
+    for (int i = 0; i < len; i++) {
+        if (i == 0 && buf[i] == delim[0]) {
+            continue;
+        }
+        if (buf[i] == delim[0])
+        {
+            n_token++;
+            if (i == len - 1) {
+                return n_token + 1;
+            }
+        }
+    }
+    n_token = n_token + 2;
+    return n_token;
+}
+
+typedef struct {
+    char** command_list;
+    int num_token;
+} command_line;
+
+command_line str_filler (char* buf, const char* delim)
+{
+    command_line command;
+
+    int num_token;
+    char* token = NULL;
+    char* savePtr = NULL;
+
+    token = strtok_r (buf, "\n", &savePtr);
+    num_token = count_token (buf, delim);
+
+    command.command_list = malloc (sizeof(char*) * num_token);
+    command.num_token = num_token;
+    token = strtok_r (token, delim, &savePtr);
+
+
+    for (int i = 0; i < num_token - 1; i++)
+    {
+
+        command.command_list[i] = malloc (strlen (token) + 1);
+
+        strcpy (command.command_list[i], token);
+
+        token = strtok_r (savePtr, delim, &savePtr);
+    }
+
+    command.command_list[num_token - 1] = NULL;
+
+    return command;
+}
+
+
+void free_command_line(command_line* command)
+{
+    for (int i = 0; i < command->num_token; i++)
+    {
+        free (command->command_list[i]);
+    }
+    free (command->command_list);
+}
 
 #endif //PROJECT3_PROJECT3_H
