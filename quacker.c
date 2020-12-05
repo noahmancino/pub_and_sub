@@ -31,14 +31,11 @@ int enqueue(int topicID, struct topicEntry post) {
     pthread_mutex_unlock(&topic->mutex);
     return EXIT_SUCCESS;
 }
-
-
 /*
  * This is the start routine for a publisher thread. It takes an array of arguments to enqueue and calls enqueue on them.
  */
 void *publisher(void *arg) {
     signal(SIGCONT, catch);
-    fflush(stdout);
     pause();
     char *filename = (char *) arg;
     FILE *commandFile = fopen(filename, "r");
