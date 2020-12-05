@@ -14,9 +14,8 @@
 #define MAXTOPICS 4
 #define URLSIZE 150
 #define CAPSIZE 200
-#define MAXNAME 25
-#define MAXPOSTS 100
-#define NUMPROXIES 10
+#define MAXNAME 50
+#define NUMPROXIES 20
 #define MAXTOKENS 15
 #define MAXCOMMANDS 50
 #define MAXTOKEN 200
@@ -56,14 +55,14 @@ struct threadPoolMember clean;
 int delta = 1;
 int stores;
 
-static void catch(int signal) { }
+static void catch(int signal) {}
 
-static void iLikeFruit(int signal) {
+static void segHandler(int signal) {
     printf("it was me!!! %lu\n\n\n\n\n\n\n\n\n\n\n\n", pthread_self());
     pthread_exit(NULL);
 }
 
-static void pudding(int signal) {
+static void leaveThread(int signal) {
     pthread_exit(NULL);
 }
 
@@ -92,7 +91,7 @@ void viewQueue(topicQueue *topic) {
 // init for topic queues
 topicQueue newTopicQueue(char *name, int topicID, int bufferSize) {
     topicQueue new;
-    new.buffer = (struct topicEntry *)malloc(sizeof(struct topicEntry) * bufferSize);
+    new.buffer = (struct topicEntry *) malloc(sizeof(struct topicEntry) * bufferSize);
     strcpy(new.name, name);
     new.tail = 0, new.head = 0, new.totalPastPosts = 0, new.bufferEntries = 0, new.id = topicID;
     pthread_mutex_init(&new.mutex, NULL);
@@ -108,12 +107,14 @@ struct topicEntry newTopicEntry(char *URL, char *caption) {
     return new;
 }
 
-// Given a string encased in quotes, returns the string with the quotes removed.
+// Takes a string and returns the string without the first or last chars
 char *removeQuotes(char *string) {
-    ++string;
-    fflush(stdout);
-    if (strlen(string)) string[strlen(string)-1] = '\0';
-    return string;
+    if (strlen(string) >= 2) {
+        ++string;
+        if (strlen(string)) string[strlen(string) - 1] = '\0';
+        return string;
+    }
+    return NULL;
 }
 
 /*
@@ -121,17 +122,17 @@ char *removeQuotes(char *string) {
  * arrays are delimited by newlines, the inner arrays are delimited by whitespace.
  */
 char ***tokenize(const char *filename) {
-    char ***parsedLines = (char ***)malloc(sizeof(char **) * MAXCOMMANDS);
+    char ***parsedLines = (char ***) malloc(sizeof(char **) * MAXCOMMANDS);
     FILE *commandFile = fopen(filename, "r");
     char *line = NULL;
     size_t n = 0;
     int i;
     for (i = 0; getline(&line, &n, commandFile) != -1; i++) {
-        parsedLines[i] = (char **)malloc(sizeof(char *) * MAXTOKENS);
+        parsedLines[i] = (char **) malloc(sizeof(char *) * MAXTOKENS);
         char *token = strtok(line, " \n");
         int j;
         for (j = 0; token != NULL; j++) {
-            parsedLines[i][j] = (char *)malloc(sizeof(char) * MAXTOKEN);
+            parsedLines[i][j] = (char *) malloc(sizeof(char) * MAXTOKEN);
             strcpy(parsedLines[i][j], token);
             token = strtok(NULL, " \n");
         }
@@ -167,19 +168,18 @@ void readToks(char ***toks) {
     printf("\n");
 }
 
-int count_token (char* buf, const char* delim) {
+int count_token(char *buf, const char *delim) {
     if (buf == NULL) {
-        printf ("Empty string\n");
+        printf("Empty string\n");
         return -1;
     }
-    int len = strlen (buf);
+    int len = strlen(buf);
     int n_token = 0;
     for (int i = 0; i < len; i++) {
         if (i == 0 && buf[i] == delim[0]) {
             continue;
         }
-        if (buf[i] == delim[0])
-        {
+        if (buf[i] == delim[0]) {
             n_token++;
             if (i == len - 1) {
                 return n_token + 1;
@@ -191,34 +191,32 @@ int count_token (char* buf, const char* delim) {
 }
 
 typedef struct {
-    char** command_list;
+    char **command_list;
     int num_token;
 } command_line;
 
-command_line str_filler (char* buf, const char* delim)
-{
+command_line str_filler(char *buf, const char *delim) {
     command_line command;
 
     int num_token;
-    char* token = NULL;
-    char* savePtr = NULL;
+    char *token = NULL;
+    char *savePtr = NULL;
 
-    token = strtok_r (buf, "\n", &savePtr);
-    num_token = count_token (buf, delim);
+    token = strtok_r(buf, "\n", &savePtr);
+    num_token = count_token(buf, delim);
 
-    command.command_list = malloc (sizeof(char*) * num_token);
+    command.command_list = malloc(sizeof(char *) * num_token);
     command.num_token = num_token;
-    token = strtok_r (token, delim, &savePtr);
+    token = strtok_r(token, delim, &savePtr);
 
 
-    for (int i = 0; i < num_token - 1; i++)
-    {
+    for (int i = 0; i < num_token - 1; i++) {
 
-        command.command_list[i] = malloc (strlen (token) + 1);
+        command.command_list[i] = malloc(strlen(token) + 1);
 
-        strcpy (command.command_list[i], token);
+        strcpy(command.command_list[i], token);
 
-        token = strtok_r (savePtr, delim, &savePtr);
+        token = strtok_r(savePtr, delim, &savePtr);
     }
 
     command.command_list[num_token - 1] = NULL;
@@ -227,13 +225,11 @@ command_line str_filler (char* buf, const char* delim)
 }
 
 
-void free_command_line(command_line* command)
-{
-    for (int i = 0; i < command->num_token; i++)
-    {
-        free (command->command_list[i]);
+void free_command_line(command_line *command) {
+    for (int i = 0; i < command->num_token; i++) {
+        free(command->command_list[i]);
     }
-    free (command->command_list);
+    free(command->command_list);
 }
 
 #endif //PROJECT3_PROJECT3_H

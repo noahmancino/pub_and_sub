@@ -7,6 +7,7 @@
 #include <string.h>
 #include <bits/sigthread.h>
 #include "project3.h"
+
 /*
  * This function will attempt to enqueue the topic entry TE into the topic queue with id TopicID. Note that this
  * function contains a critical section and will block until the topic queue with name TopicID's mutex is unlocked.
@@ -35,49 +36,11 @@ int enqueue(int topicID, struct topicEntry post) {
 /*
  * This is the start routine for a publisher thread. It takes an array of arguments to enqueue and calls enqueue on them.
  */
-
-/*
-void *publisher(void *arg) {
-    signal(SIGCONT, catch);
-    printf("a pub %lu\n", pthread_self());
-    fflush(stdout);
-    pause();
-    char *filename = (char *)arg;
-    printf("oh boy! about to read some pub toks\n");
-    char ***tokenized = tokenize(filename);
-    for (int i = 0; tokenized[i] != NULL; i++) {
-        char **lineTokens = tokenized[i];
-       // printf("%s\n", lineTokens[0]);
-        if (!strcmp(lineTokens[0], "sleep")) {
-            //printf("Executed command: sleep\n");
-            usleep(atoi(lineTokens[1]));
-        }
-        else if (!strcmp(lineTokens[0], "stop")) {
-            ///printf("Stopped\n");
-            free(tokenized);
-            fflush(stdout);
-            return EXIT_SUCCESS;
-        }
-        else if (!strcmp(lineTokens[0], "put")) {
-            //printf("get\n");
-            fflush(stdout);
-            printf("going to start reading stuff in %lu\n", pthread_self());
-            readToks(tokenized);
-            printf("atoi! %s\n", lineTokens[1]);
-            int topicID = atoi(lineTokens[1]);
-            char *URL = removeQuotes(lineTokens[2]);
-            char *caption = removeQuotes(lineTokens[3]);
-            struct topicEntry newPost = newTopicEntry(URL, caption);
-            enqueue(topicID, newPost);
-        }
-    }
-}
-*/
 void *publisher(void *arg) {
     signal(SIGCONT, catch);
     fflush(stdout);
     pause();
-    char *filename = (char *)arg;
+    char *filename = (char *) arg;
     FILE *commandFile = fopen(filename, "r");
     char *line = NULL;
     size_t n = 0;
@@ -87,13 +50,11 @@ void *publisher(void *arg) {
         if (!strcmp(lineTokens[0], "sleep")) {
             //printf("Executed command: sleep\n");
             usleep(atoi(lineTokens[1]));
-        }
-        else if (!strcmp(lineTokens[0], "stop")) {
+        } else if (!strcmp(lineTokens[0], "stop")) {
             free_command_line(&apple);
             free(line);
             return EXIT_SUCCESS;
-        }
-        else if (!strcmp(lineTokens[0], "put")) {
+        } else if (!strcmp(lineTokens[0], "put")) {
             int topicID = atoi(lineTokens[1]);
             char *URL = removeQuotes(lineTokens[2]);
             struct topicEntry newPost = newTopicEntry(URL, "");
@@ -114,7 +75,7 @@ void *publisher(void *arg) {
  * mutex is unlocked.
 */
 void *dequeue(void *topicID) {
-    topicQueue *topic = getQueue(*(int *)topicID);
+    topicQueue *topic = getQueue(*(int *) topicID);
     pthread_mutex_lock(&topic->mutex);
     if (!topic->bufferEntries) {
         pthread_mutex_unlock(&topic->mutex);
@@ -137,7 +98,7 @@ void *dequeue(void *topicID) {
  * elapsed.
  */
 void *cleaner(void *arg) {
-    int topics = *(int *)arg;
+    int topics = *(int *) arg;
     while (1) {
         for (int i = 0; i < topics; i++) {
             dequeue(&topicStore[i].id);
@@ -146,6 +107,7 @@ void *cleaner(void *arg) {
     }
     return EXIT_SUCCESS;
 }
+
 /*
  * This routine takes three arguments: A) A pointer to an int, lastEntry, which is the number of the last entry read by
  * the calling thread on this topic, B) A reference to an empty topicEntry struct, and C) a topicID. The routine will
@@ -161,7 +123,7 @@ int getEntry(int *lastEntry, struct topicEntry *post, int topicID) {
     pthread_mutex_lock(&topic->mutex);
     // If the next entry isn't in the queue, we need to know if there is a younger/later entry or not.
     int was_dequed = 0;
-    for (int i = 0; i <= topic->bufferEntries; i++) {
+    for (int i = 0; i < topic->bufferEntries; i++) {
         struct topicEntry entry = topic->buffer[(topic->tail + i) % topic->totalCapacity];
         if (entry.entryNum == newEntry) {
             // Case where newEntry is in the queue
@@ -192,51 +154,12 @@ int getEntry(int *lastEntry, struct topicEntry *post, int topicID) {
  * Start routine for the subscriber thread. Takes an array of getEntry args and the length of the array, calls
  * getEntry for each one, and displays the ticket it fills.
  */
-
-/*
-void *subscriber(void *arg) {
-    signal(SIGCONT, catch);
-    printf("a sub %lu\n", pthread_self());
-    fflush(stdout);
-    pause();
-    sleep(1);
-    printf("oh boy!  to read some sub toks\n");
-    fflush(stdout);
-    int lastEntry = 0;
-    struct topicEntry buffer;
-    char *filename = (char *)arg;
-    char ***tokenized = tokenize(filename);
-    for (int i = 0; tokenized[i] != NULL; i++) {
-        char **lineTokens = tokenized[i];
-        if (!strcmp(lineTokens[0], "sleep")) {
-       //     printf("Proxy thread %lu - type: subscriber - Executed command: sleep\n", pthread_self());
-            usleep(atoi(lineTokens[1]));
-        }
-        else if (!strcmp(lineTokens[0], "stop")) {
-    //        printf("Proxy thread %lu - type: subscriber - Executed command: stop\n", pthread_self());
-            free(tokenized);
-            return EXIT_SUCCESS;
-        }
-        else if (!strcmp(lineTokens[0], "get")) {
-       //     printf("Proxy thread %lu - type: subscriber - Executed command: get\n", pthread_self());
-            if (!getEntry(&lastEntry, &buffer, atoi(lineTokens[1]))) {
-                //printf("anout to show you the sickest buffer!\n");
-                viewPost(buffer);
-            }
-            else {
-                //printf("nothing!\n");
-            }
-        }
-    }
-}
-*/
-
 void *subscriber(void *arg) {
     signal(SIGCONT, catch);
     pause();
     int lastEntry = 0;
     struct topicEntry buffer;
-    char *filename = (char *)arg;
+    char *filename = (char *) arg;
     char writefilename[50];
     sprintf(writefilename, "SUB:%lu.txt", pthread_self());
     FILE *writefile = fopen(writefilename, "w");
@@ -249,14 +172,14 @@ void *subscriber(void *arg) {
         if (!strcmp(lineTokens[0], "sleep")) {
             //     printf("Proxy thread %lu - type: subscriber - Executed command: sleep\n", pthread_self());
             usleep(atoi(lineTokens[1]));
-        }
-        else if (!strcmp(lineTokens[0], "stop")) {
+        } else if (!strcmp(lineTokens[0], "stop")) {
             //        printf("Proxy thread %lu - type: subscriber - Executed command: stop\n", pthread_self());
             free(line);
             free_command_line(&bananas);
+            fclose(writefile);
+            fclose(commandFile);
             return EXIT_SUCCESS;
-        }
-        else if (!strcmp(lineTokens[0], "get")) {
+        } else if (!strcmp(lineTokens[0], "get")) {
             //     printf("Proxy thread %lu - type: subscriber - Executed command: get\n", pthread_self());
             if (!getEntry(&lastEntry, &buffer, atoi(lineTokens[1]))) {
                 topicQueue *topic = getQueue(atoi(lineTokens[1]));
@@ -269,29 +192,36 @@ void *subscriber(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
-    signal(SIGSEGV, iLikeFruit);
-    signal(SIGUSR1, pudding);
+    signal(SIGSEGV, segHandler);
+    signal(SIGUSR1, leaveThread);
+    // Keep track of jobs when thread pool is full.
+    int numOverflowPubs = 0;
+    int numOverflowSubs = 0;
+    char overflowPubs[MAXCOMMANDS][MAXNAME];
+    char overflowSubs[MAXCOMMANDS][MAXNAME];
+    overflowPubs[0][0] = '\0';
+    overflowSubs[0][0] = '\0';
     char *masterCommandFile = argv[1];
     char ***tokenizedMaster = tokenize(masterCommandFile);
     stores = 0;
     for (int i = 0; tokenizedMaster[i] != NULL; i++) {
         // Create a topic with ID (integer) and length. This allocates a topic queue.
         char **lineTokens = tokenizedMaster[i];
-        //printf("%s\n\n\n", lineTokens[0]);
         if (!strcmp(lineTokens[0], "create")) {
             int topicID = atoi(lineTokens[2]);
             char *name = removeQuotes(lineTokens[3]);
             int bufferSize = atoi(lineTokens[4]);
             topicStore[stores] = newTopicQueue(name, topicID, bufferSize);
             ++stores;
-            int k;
             // TODO: free topic buffers
             // TODO: make sure things don't break because the buffer is mallocd.
         }
-        // Start all of the publishers and subscribers, as well as the cleanup thread.
+            // Start all of the publishers and subscribers, as well as the cleanup thread.
         else if (!strcmp(lineTokens[0], "start")) {
-            pthread_create(&clean.thread, NULL, cleaner, (void *)&stores);
-            for (int k = 0; k < NUMPROXIES/2; k++) {
+            pthread_create(&clean.thread, NULL, cleaner, (void *) &stores);
+            // Might not get setup before getting SIGCONT if you don't wait.
+            usleep(150);
+            for (int k = 0; k < NUMPROXIES / 2; k++) {
                 if (publisherPool[k].isNotFree) {
                     pthread_kill(publisherPool[k].thread, SIGCONT);
                 }
@@ -299,7 +229,7 @@ int main(int argc, char *argv[]) {
                     pthread_kill(subscriberPool[k].thread, SIGCONT);
                 }
             }
-            for (int k = 0; k < NUMPROXIES/2; k++) {
+            for (int k = 0; k < NUMPROXIES / 2; k++) {
                 if (publisherPool[k].isNotFree) {
                     pthread_join(publisherPool[k].thread, NULL);
                     publisherPool[k].isNotFree = 0;
@@ -310,13 +240,13 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        // Set delta (determines how long until posts get cleaned from store) to specified value.
+            // Set delta (determines how long until posts get cleaned from store) to specified value.
         else if (!strcmp(lineTokens[0], "delta")) {
             delta = atoi(lineTokens[1]);
         }
-        /* Adds a job to the publisher threads workload. A free thread is allocated to be the “proxy" for the
-         * publisher
-         */
+            /* Adds a job to the publisher threads workload. A free thread is allocated to be the “proxy" for the
+             * publisher
+             */
         else if (!strcmp(lineTokens[1], "publisher")) {
             char *filename = removeQuotes(lineTokens[2]);
             for (int k = 0; k < NUMPROXIES / 2; k++) {
@@ -328,12 +258,13 @@ int main(int argc, char *argv[]) {
             }
             // TODO: deal with no available threads.
         }
-        /* Adds a job to the subscriber threads workload A free thread is allocated to be the “proxy" for the
-         * subscriber
-         */
+            /* Adds a job to the subscriber threads workload A free thread is allocated to be the “proxy" for the
+             * subscriber
+             */
         else if (!strcmp(lineTokens[1], "subscriber")) {
             char *filename = removeQuotes(lineTokens[2]);
-            for (int k = 0; k < NUMPROXIES / 2; k++) {
+            int k;
+            for (k = 0; k < NUMPROXIES / 2; k++) {
                 if (!subscriberPool[k].isNotFree) {
                     subscriberPool[k].isNotFree = 1;
                     pthread_create(&subscriberPool[k].thread, NULL, subscriber, filename);
@@ -341,6 +272,7 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
+        // Prints topic queues to console
         else if (!strcmp(lineTokens[0], "query")) {
             for (int k = 0; k < stores; k++) {
                 viewQueue(&topicStore[k]);
